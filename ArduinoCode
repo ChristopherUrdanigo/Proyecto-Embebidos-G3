@@ -1,0 +1,171 @@
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+#include <Servo.h>
+
+Servo myservo;
+#define buzzer 7
+#define ledRojo 6
+#define ledAmarillo 5
+#define sensor 4
+#define pinCam 12
+
+String codigo = "1597";
+String validar = "";
+String desbloqueo = "1234";
+String validar_desbl = "";
+int estado_sensor;
+int intentos = 3;
+bool est_puerta = false; 
+
+// inicializar la libreria con los pines designados 
+LiquidCrystal_I2C lcd(0x27,16,2);
+// inicializar el teclado
+const byte ROWS = 4;
+const byte COLS = 4;
+char keys[ROWS][COLS]={
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {A3,A2,A1,A0};
+byte colPins[COLS] = {11,10,9,8};
+Keypad teclado = Keypad(makeKeymap(keys),rowPins,colPins,ROWS,COLS);
+
+void setup() {
+  // configuracion del puerto serial y pantalla lcd
+  Serial.begin(9600);
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  // definimos salidas
+  pinMode(buzzer, OUTPUT);
+  pinMode(ledRojo, OUTPUT);
+  pinMode(ledAmarillo, OUTPUT);
+  pinMode(sensor, INPUT_PULLUP);
+  pinMode(pinCam, OUTPUT);
+
+  myservo.attach(2);
+  myservo.write(90);
+}
+
+// funcion para validar el codigo
+void funcionValidar(){
+  digitalWrite(pinCam, LOW);
+  for(int x=0;x<4;x++){
+    // cada tecla presionada se suma al codigo
+    // y se intercambia por el simbolo '*'
+    char caracter = teclado.waitForKey();
+    validar += String(caracter);
+    lcd.setCursor(x,0);
+    lcd.print('*');
+  }
+  // condicion y proceso para codigo correcto
+  if(validar==codigo){
+    delay(2000);
+    lcd.clear();
+    lcd.print("PUERTA ABIERTA");
+    myservo.write(0);
+    est_puerta = true;
+    digitalWrite(ledAmarillo, HIGH);
+    delay(3000);
+    validar = "";
+    intentos = 3;
+  }else{
+    if(intentos>1){
+      delay(2000);
+      lcd.clear();
+      lcd.print("INCORRECTO");
+      digitalWrite(ledRojo, HIGH);
+      delay(4000);
+      validar = "";
+      intentos--;
+    }else{
+      delay(2000);
+      digitalWrite(pinCam, HIGH);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("POSIBLE INTRUSO");
+      lcd.setCursor(0, 1);
+      lcd.print("PUERTA BLOQUEADA");
+      digitalWrite(ledRojo, HIGH);
+      tone(buzzer, 400, 1000);
+      delay(2000);
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("CONTACTAR ADMIN");
+      lcd.setCursor(0, 1);
+      lcd.print("0978780716");
+      delay(10000);
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("INGRESE CODIGO");
+      lcd.setCursor(0, 1);
+      lcd.print("DE DESBLOQUEO:");
+      delay(2000);
+      lcd.clear();
+
+      while (validar_desbl != desbloqueo) {
+        for (int z = 0; z < 4; z++) {
+          char caracter2 = teclado.waitForKey();
+          validar_desbl += String(caracter2);
+          lcd.setCursor(z, 0);
+          lcd.print('*');
+        }
+        if (validar_desbl != desbloqueo) {
+          lcd.clear();
+          lcd.print("CODIGO ERRADO");
+          delay(2000);
+          validar_desbl = "";
+          lcd.clear();
+        }
+      }
+      intentos = 3;
+      validar_desbl = "";
+      validar = "";
+    }
+  }
+}
+
+void loop(){
+  estado_sensor = digitalRead(sensor);
+  digitalWrite(ledRojo, LOW);
+  delay(100);
+
+  if (estado_sensor == LOW) { // Puerta cerrada
+    if (est_puerta) {
+      myservo.write(90);
+      est_puerta = false;
+    }
+    noTone(buzzer);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("BIENVENIDO");
+    lcd.setCursor(0, 1);
+    lcd.print("HUESPED");
+    delay(2000);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("INGRESE EL");
+    lcd.setCursor(0, 1);
+    lcd.print("CODIGO:");
+    delay(1000);
+    lcd.clear();
+    funcionValidar();
+    digitalWrite(ledRojo, LOW);
+    digitalWrite(ledAmarillo, LOW);
+    lcd.clear();
+  }else { // Puerta abierta
+    digitalWrite(ledRojo, HIGH);
+    delay(10000);
+    tone(buzzer, 400, 4000);
+    delay(500);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("CERRAR PUERTA!!");
+    delay(100);
+  }
+}
